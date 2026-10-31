@@ -2,6 +2,7 @@ import math
 import random
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="암호 해독 게임", page_icon="🔐", layout="centered")
 
@@ -37,7 +38,7 @@ WORDS = [
     "CODE", "LOCK", "SAFE", "WOLF", "BEAR", "CAKE", "SHIP", "ROAD", "GOLD",
 ]
 WORDS4 = [w for w in WORDS if len(w) == 4]
-VALID_A = [a for a in range(2, 26) if math.gcd(a, 26) == 1]  # 3,5,7,9,11,15,17,19,21,23,25
+VALID_A = [a for a in range(2, 8) if math.gcd(a, 26) == 1]  # 아핀 암호의 a: 7 이하이면서 26과 서로소 -> 3, 5, 7
 
 
 def n(ch):
@@ -80,7 +81,7 @@ def new_problem(stage):
         return {"word": word, "cipher": caesar_encrypt(word, 3)}
     if stage == 2:
         a = random.choice(VALID_A)
-        b = random.randint(1, 25)
+        b = random.randint(1, 10)  # b도 작은 수로 (1~10)
         word = random.choice(WORDS)
         return {"word": word, "a": a, "b": b, "cipher": affine_encrypt(word, a, b), "inv_ok": False}
     while True:
@@ -90,6 +91,67 @@ def new_problem(stage):
             break
     word = random.choice(WORDS4)  # 2x2 행렬이므로 2글자씩 묶기 위해 4글자 단어 사용
     return {"word": word, "K": K, "cipher": hill_encrypt(word, K), "inv_ok": False}
+
+
+CALC_HTML = """
+<style>
+  body { margin:0; font-family: 'Segoe UI', sans-serif; }
+  .calc { background:#2a2f40; border:1px solid #4a5070; border-radius:12px; padding:12px; max-width:340px; margin:auto; }
+  #disp { width:100%; box-sizing:border-box; background:#ffffff; color:#000000; caret-color:#000000;
+          font-size:26px; font-weight:600; text-align:right; padding:10px 12px; border:none; border-radius:8px;
+          font-family:'Courier New', monospace; }
+  #res { color:#f0c36d; text-align:right; min-height:22px; margin:6px 4px 8px 0; font-size:15px; font-family:'Courier New', monospace; }
+  .grid { display:grid; grid-template-columns:repeat(5, 1fr); gap:6px; }
+  button { background:#3b4260; color:#ffffff; border:none; border-radius:8px; padding:11px 0; font-size:17px; cursor:pointer; }
+  button:hover { background:#4c5580; }
+  button.op { background:#5b4a1f; } button.op:hover { background:#7a6228; }
+  button.eq { background:#2e7d5b; } button.eq:hover { background:#3a9a70; }
+  button.clr { background:#7d2e3a; } button.clr:hover { background:#9a3a49; }
+</style>
+<div class="calc">
+  <input id="disp" type="text" inputmode="none" placeholder="0" autocomplete="off">
+  <div id="res"></div>
+  <div class="grid">
+    <button onclick="add('7')">7</button><button onclick="add('8')">8</button><button onclick="add('9')">9</button>
+    <button class="op" onclick="add('÷')">÷</button><button class="clr" onclick="clr()">C</button>
+    <button onclick="add('4')">4</button><button onclick="add('5')">5</button><button onclick="add('6')">6</button>
+    <button class="op" onclick="add('×')">×</button><button class="clr" onclick="back()">⌫</button>
+    <button onclick="add('1')">1</button><button onclick="add('2')">2</button><button onclick="add('3')">3</button>
+    <button class="op" onclick="add('-')">−</button><button class="op" onclick="add('(')">(</button>
+    <button onclick="add('0')">0</button><button class="op" onclick="add(' mod ')">mod</button><button class="op" onclick="add('.')">.</button>
+    <button class="op" onclick="add('+')">+</button><button class="op" onclick="add(')')">)</button>
+    <button class="eq" style="grid-column: 1 / -1" onclick="calc()">=</button>
+  </div>
+</div>
+<script>
+  const d = document.getElementById('disp'), r = document.getElementById('res');
+  function add(t){ d.value += t; d.focus(); }
+  function clr(){ d.value=''; r.textContent=''; }
+  function back(){ d.value = d.value.endsWith(' mod ') ? d.value.slice(0,-5) : d.value.slice(0,-1); }
+  function ev(e){
+    e = e.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-').trim();
+    if(!/^[0-9+\\-*/().\\s]+$/.test(e)) throw 'x';
+    return Function('"use strict"; return (' + e + ')')();
+  }
+  function calc(){
+    try{
+      let t = d.value; let v;
+      if(t.includes('mod')){
+        const i = t.lastIndexOf('mod');
+        const m = ev(t.slice(i+3)); const l = ev(t.slice(0,i));
+        v = ((l % m) + m) % m;
+      } else { v = ev(t); }
+      r.textContent = '= ' + (Number.isInteger(v) ? v : Math.round(v*1e6)/1e6);
+    } catch(e){ r.textContent = '식을 확인하세요'; }
+  }
+  d.addEventListener('keydown', e => { if(e.key==='Enter'){ e.preventDefault(); calc(); } });
+</script>
+"""
+
+
+def show_calculator():
+    st.markdown("**🧮 계산기** (mod 버튼: 예) `9 × (7 − 3) mod 26` 입력 후 `=`)")
+    components.html(CALC_HTML, height=330)
 
 
 # ---------------------------------------------------------------
@@ -127,12 +189,6 @@ def retry_new():
 def restart():
     for k in list(ss.keys()):
         del ss[k]
-
-
-def letter_table():
-    top = " ".join(f"{ch}" for ch in ALPHA)
-    nums = " ".join(f"{i}" for i in range(26))
-    return top, nums
 
 
 def show_table():
@@ -173,7 +229,9 @@ INTRO = {
 **이 게임의 진행 방법**
 1. 문제에 주어진 `a`의 **역원을 직접 구해서** 입력합니다. (이 단계만 직접 계산!)
 2. 역원이 맞으면 다음 단계로 넘어갑니다.
-3. 암호문의 알파벳을 숫자로 바꾸고 **계산기**로 `a⁻¹ · (C − b) mod 26`을 계산한 뒤, 숫자를 다시 알파벳으로 바꿔 정답을 입력합니다.
+3. 문제 화면에 있는 **계산기**로 암호문의 알파벳을 숫자로 바꾼 뒤 `a⁻¹ · (C − b) mod 26`을 계산하고, 숫자를 다시 알파벳으로 바꿔 정답을 입력합니다.
+
+`a`는 3, 5, 7 중 하나이고, `b`는 문제 화면에서 미리 알려줍니다.
 
 💡 역원 구하는 팁: `a · x`를 26으로 나눈 나머지가 1이 되는 x를 찾으면 됩니다. (x는 0~25 사이)
 """),
@@ -206,7 +264,6 @@ if ss.stage > 3:
 if ss.phase == "intro":
     title, body = INTRO[ss.stage]
     st.header(title)
-    st.markdown(f'<div class="info-box">{"" }</div>', unsafe_allow_html=True)
     st.markdown(body)
     st.button("문제 풀기 ▶", on_click=go_play, type="primary")
     st.stop()
@@ -233,8 +290,6 @@ def check_answer(ans):
     return False
 
 
-solved = False
-
 # ----- 1단계 -----
 if ss.stage == 1:
     st.write("**규칙:** 알파벳을 3칸 뒤로 민 암호입니다. 원래 단어(3~4글자)를 맞혀 보세요.")
@@ -242,15 +297,18 @@ if ss.stage == 1:
     with st.form(f"f1_{ss.pid}"):
         ans = st.text_input("평문 입력 (영어)")
         if st.form_submit_button("제출"):
-            solved = check_answer(ans)
-            ss.solved = solved
-    solved = ss.get("solved", False) and ss.tries > 0 and ans.strip().upper() == p["word"]
+            if check_answer(ans):
+                ss.solved_pid = ss.pid
 
 # ----- 2단계 -----
 elif ss.stage == 2:
     a, b = p["a"], p["b"]
     st.write(f"**암호화 식:**  `C = ({a}·P + {b}) mod 26`")
+    k1, k2 = st.columns(2)
+    k1.metric("a 값", a)
+    k2.metric("b 값 (미리 알려드려요)", b)
     show_table()
+    show_calculator()
 
     st.markdown("#### ① 역원 구하기 (직접 계산)")
     st.write(f"`{a} · x ≡ 1 (mod 26)` 을 만족하는 **x = {a}⁻¹** 를 구하세요.")
@@ -276,8 +334,7 @@ elif ss.stage == 2:
             submitted = st.form_submit_button("제출")
         if submitted:
             if check_answer(ans):
-                ss.solved = True
-        solved = ss.get("solved", False) and ss.pid == ss.get("solved_pid", ss.pid)
+                ss.solved_pid = ss.pid
 
 # ----- 3단계 -----
 else:
@@ -314,12 +371,10 @@ else:
             submitted = st.form_submit_button("제출")
         if submitted:
             if check_answer(ans):
-                ss.solved = True
-        solved = ss.get("solved", False)
+                ss.solved_pid = ss.pid
 
 # ---------- 정답 후 이동 ----------
-if ss.get("solved"):
-    ss.solved = False
+if ss.get("solved_pid") == ss.pid:
     st.write(f"정답: **{p['word']}** · 이번 문제 시도 횟수: {ss.tries}회")
     st.button("다음 단계 ▶" if ss.stage < 3 else "게임 클리어 🎉", on_click=next_stage, type="primary")
 else:
